@@ -80,7 +80,7 @@ where
 {
     /// Constructs a new Markov chain.
     pub fn new() -> Chain<T> {
-        Self::of_order(1)
+        Self::of_order(2)
     }
 
     /// Creates a new Markov chain of the specified order. The order is the number of previous
@@ -419,11 +419,9 @@ fn line(chain: &Chain<String>, count: usize) -> String {
         .map(|x| &**x)
         .map(|x| {
             x.clone()
-                .first()
-                .unwrap_or(&Some(String::from("")))
-                .as_ref()
-                .unwrap_or(&String::from(""))
-                .clone()
+                .iter()
+                .map(|z| z.clone().unwrap_or(String::from("")).clone())
+                .join(" ")
         })
         .collect::<Vec<_>>();
     let mut sum = 0;
@@ -436,11 +434,9 @@ fn line(chain: &Chain<String>, count: usize) -> String {
                 .map(|x| &**x)
                 .map(|x| {
                     x.clone()
-                        .first()
-                        .unwrap_or(&Some(String::from("")))
-                        .as_ref()
-                        .unwrap_or(&String::from(""))
-                        .clone()
+                        .iter()
+                        .map(|z| z.clone().unwrap_or(String::from("")).clone())
+                        .join(" ")
                 })
                 .collect::<Vec<_>>();
             sum = 0;
@@ -448,20 +444,58 @@ fn line(chain: &Chain<String>, count: usize) -> String {
         }
         let key_array = rng.choose(&choices).unwrap().clone().to_owned();
         let key = key_array.clone();
+
         let word = key;
         sum = sum + syllables_in_word(&word);
+        let mut token = vec![None; chain.order];
+        let token_word = if word.split(' ').collect::<Vec<_>>().len() < chain.order {
+            //dbg!("smaller", &word, &keys);
+            format!(
+                "{} {}",
+                keys.last()
+                    .unwrap()
+                    .rsplitn(1, " ")
+                    .collect::<Vec<_>>()
+                    .join(""),
+                word
+            )
+        } else {
+            word.clone()
+        };
+
+        for t in token_word.split(' ') {
+            token.remove(0);
+            token.push(Some(t.to_string()));
+        }
+
         keys.push(word.clone());
         if count - sum <= 0 {
             break;
         }
-        let token = vec![Some(word.clone()); 1];
 
-        let map = chain.map.get(&token).unwrap();
-        choices = map
-            .keys()
-            .map(|x| x.clone().unwrap())
-            .filter(|x| syllables_in_word(&x) <= (count - sum))
-            .collect::<Vec<_>>();
+        //dbg!(&token);
+        choices = if let Some(map) = chain.map.get(&token) {
+            //dbg!(&map);
+            map.keys()
+                .map(|x| x.clone().unwrap())
+                .filter(|x| syllables_in_word(&x) <= (count - sum))
+                .collect::<Vec<_>>()
+        } else {
+            // end of chain get some random start
+            chain
+                .map
+                .keys()
+                .map(|x| &**x)
+                .map(|x| {
+                    x.clone()
+                        .iter()
+                        .map(|z| z.clone().unwrap_or(String::from("")).clone())
+                        .join(" ")
+                })
+                .filter(|x| syllables_in_word(&x) <= (count - sum))
+                .collect::<Vec<_>>()
+        };
+        //dbg!(&choices);
     }
 
     keys.join(" ")
@@ -470,8 +504,9 @@ fn line(chain: &Chain<String>, count: usize) -> String {
 fn main() {
     let mut chain = Chain::new();
     let string = fs::read_to_string("ray.txt").unwrap_or(String::from(""));
-    //let string = "the truth is i dont know what i am doing the truth cant help";
+    //let string = "the truth is the banana is gray";
     chain.feed_str(&string);
+    //dbg!(&chain.map);
     println!("{}", line(&chain, 5));
     println!("{}", line(&chain, 7));
     println!("{}", line(&chain, 5));
