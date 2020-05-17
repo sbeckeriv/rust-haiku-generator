@@ -8,9 +8,26 @@ edition = "2018"
 
 [dependencies]
 rand = "*"
+Inflector = "*"
+wordsworth = "*"
+clap = { version = "3.0.0-beta.1", features = ["yaml"] }
 getopts = { version = "0.2" }
 petgraph = { version = "0.4"}
 itertools = "*"
 serde = "1.0"
 serde_derive = "1.0"
 serde_yaml = { version = "0.7" }
+
+[profile.release]
+panic = "abort"
+lto = true
+codegen-units = 1
+incremental = false
+opt-level = "z"
+
+[profile.dev]
+panic = "abort"
+lto = true
+codegen-units = 1
+incremental = false
+opt-level = "z"

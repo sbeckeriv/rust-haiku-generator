@@ -1,0 +1,18 @@
+name: haiku-generator
+version: "1.0"
+author: Becker
+about: haiku markov chains
+args:
+    - FILE:
+        short: s
+        long: stored
+        about: Use yaml files
+        takes_value: true
+    - INPUT:
+        about: Sets the input file to use
+        required: true
+        index: 1
+    - verbose:
+        short: v
+        multiple: true
+        about: Sets the level of verbosity
