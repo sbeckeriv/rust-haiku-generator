@@ -24,7 +24,7 @@ mod markov;
 use markov::Chain;
 fn syllables_in_word(word: &str) -> usize {
     word.trim()
-        .split(" ")
+        .split(' ')
         .map(|x| {
             let mut count = wordsworth::syllable_counter(x);
             if count == 0 {
@@ -44,14 +44,14 @@ fn base_chain(chain: &Chain<String>) -> Vec<String> {
         .map(|x| {
             x.clone()
                 .iter()
-                .map(|z| z.clone().unwrap_or(String::from("")))
+                .map(|z| z.clone().unwrap_or_else(|| String::from("")))
                 .join(" ")
         })
         .collect::<Vec<_>>()
 }
 
 // make the key token from a string
-fn make_token(context: &String, order: usize) -> Vec<Option<String>> {
+fn make_token(context: &str, order: usize) -> Vec<Option<String>> {
     let mut token = vec![None; order];
     for t in context.rsplitn(order, ' ') {
         token.remove(0);
@@ -65,10 +65,8 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
     let mut rng = thread_rng();
     let mut sum = 0;
 
-    let mut choices = if context.is_none() {
-        base_chain(chain)
-    } else {
-        let token = make_token(context.unwrap(), chain.order);
+    let mut choices = if let Some(context) = context {
+        let token = make_token(context, chain.order);
         if let Some(map) = chain.map.get(&token) {
             map.keys()
                 .map(|x| x.clone().unwrap())
@@ -77,6 +75,8 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         } else {
             base_chain(chain)
         }
+    } else {
+        base_chain(chain)
     };
     loop {
         if choices.is_empty() {
