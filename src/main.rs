@@ -23,7 +23,16 @@ use std::fs;
 mod markov;
 use markov::Chain;
 fn syllables_in_word(word: &str) -> usize {
-    wordsworth::syllable_counter(word) as usize
+    word.trim()
+        .split(" ")
+        .map(|x| {
+            let mut count = wordsworth::syllable_counter(x);
+            if count == 0 {
+                count = 1
+            }
+            count
+        })
+        .sum::<u32>() as usize
 }
 
 //Load up the base keys
@@ -96,27 +105,29 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         };
 
         let token = make_token(&token_word, chain.order);
-
+        //dbg!(syllables_in_word(&word), &word);
         keys.push(word.clone());
         if count as i32 - sum as i32 == 0 {
             break;
         } else if (count as i32 - sum as i32) < 0 {
-            dbg!(count as i32 - sum as i32);
+            // could happen if first selection is larger then request because we dont filter them
+            ////dbg!(count as i32 - sum as i32, &keys, sum, count);
             let bad_word = keys.pop().unwrap();
-            sum = sum.checked_sub(bad_word.len()).unwrap_or(0);
+            sum = sum.saturating_sub(bad_word.len());
         }
-
+        let remaining = count - sum;
+        //dbg!(remaining);
         choices = if let Some(map) = chain.map.get(&token) {
             map.keys()
                 .map(|x| x.clone().unwrap())
-                .filter(|x| syllables_in_word(&x) <= (count - sum))
+                .filter(|x| syllables_in_word(&x) <= remaining)
                 .collect::<Vec<_>>()
         } else {
             // end of chain get some random start
             base_chain(chain)
                 .iter()
-                .map(|x| x.clone())
-                .filter(|x| syllables_in_word(&x) <= (count - sum))
+                .cloned()
+                .filter(|x| syllables_in_word(&x) <= remaining)
                 .collect::<Vec<_>>()
         };
     }
