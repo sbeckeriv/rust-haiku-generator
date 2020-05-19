@@ -1,7 +1,8 @@
 extern crate inflector;
 extern crate rand;
 extern crate wordsworth;
-
+#[macro_use]
+extern crate lazy_static;
 extern crate itertools;
 extern crate petgraph;
 extern crate serde;
@@ -11,7 +12,7 @@ extern crate serde_yaml;
 use clap::{load_yaml, App};
 use inflector::cases::sentencecase::to_sentence_case;
 use std::borrow::ToOwned;
-
+use std::collections::HashMap;
 use std::path::Path;
 
 use itertools::Itertools;
@@ -22,13 +23,50 @@ use std::fs;
 
 mod markov;
 use markov::Chain;
+use std::fs::File;
+use std::io::{self, BufRead};
+extern crate cmudict_core;
+lazy_static! {
+    static ref DICT: HashMap<String, String> = {
+        let filename = "/home/becker/.config/haiku/cmudict.clean";
+        let file = File::open(filename).unwrap();
+        let mut hash = HashMap::new();
+        for line in io::BufReader::new(file).lines() {
+            let s = line.unwrap();
+            let mut split = s.splitn(2, "  ");
+            if let Some(key) = split.next() {
+                if let Some(value) = split.next() {
+                    hash.insert(key.to_string(), value.to_string());
+                }
+            }
+        }
+        hash
+    };
+}
+
+use std::time::SystemTime;
+
+use cmudict_core::Rule;
+use std::str::FromStr;
 fn syllables_in_word(word: &str) -> usize {
     word.trim()
         .split(' ')
         .map(|x| {
-            let mut count = wordsworth::syllable_counter(x);
-            if count == 0 {
-                count = 1
+            let mut count = 0;
+            let now = SystemTime::now();
+            if let Some(dict_word) = DICT.get(x) {
+                println!("lookup took {}", now.elapsed().unwrap().as_secs());
+                count = Rule::from_str(&dict_word)
+                    .unwrap()
+                    .pronunciation()
+                    .iter()
+                    .filter(|x| x.is_syllable())
+                    .count() as u32;
+            } else {
+                count = wordsworth::syllable_counter(x);
+                if count == 0 {
+                    count = 1;
+                }
             }
             count
         })
@@ -107,6 +145,7 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         let token = make_token(&token_word, chain.order);
         //dbg!(syllables_in_word(&word), &word);
         keys.push(word.clone());
+        //dbg!(&keys);
         if count as i32 - sum as i32 == 0 {
             break;
         } else if (count as i32 - sum as i32) < 0 {
@@ -115,27 +154,32 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
             let bad_word = keys.pop().unwrap();
             sum = sum.saturating_sub(bad_word.len());
         }
+        //dbg!(count);
         let remaining = count - sum;
         //dbg!(remaining);
         choices = if let Some(map) = chain.map.get(&token) {
+            //dbg!(&keys);
             map.keys()
                 .map(|x| x.clone().unwrap())
                 .filter(|x| syllables_in_word(&x) <= remaining)
                 .collect::<Vec<_>>()
         } else {
             // end of chain get some random start
+            //dbg!(&keys);
             base_chain(chain)
                 .iter()
                 .cloned()
                 .filter(|x| syllables_in_word(&x) <= remaining)
                 .collect::<Vec<_>>()
         };
-    }
 
+        //dbg!(&keys);
+    }
     keys.join(" ")
 }
 fn main() {
     let yaml = load_yaml!("cli.yml");
+
     let matches = App::from(yaml).get_matches();
     let mut chain = Chain::new();
     if let Some(stored) = matches.value_of("FILE") {
@@ -161,5 +205,10 @@ fn main() {
     let two = to_sentence_case(&line(&chain, 7, Some(&one)));
     let three = to_sentence_case(&line(&chain, 5, Some(&two)));
 
-    println!("{}\n{}\n{}", one, two, three);
+    println!(
+        "{}\n{}\n{}",
+        syllables_in_word(&one),
+        syllables_in_word(&two),
+        syllables_in_word(&three),
+    );
 }

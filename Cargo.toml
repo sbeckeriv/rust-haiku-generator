@@ -7,6 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+cmudict_core = {branch= "fix/update-reqwest-version", git= "https://gitlab.com/shnewto/cmudict.git", version="*"}
+lazy_static = "*"
 rand = "*"
 Inflector = "*"
 wordsworth = "*"
@@ -25,9 +27,3 @@ codegen-units = 1
 incremental = false
 opt-level = "z"
 
-[profile.dev]
-panic = "abort"
-lto = true
-codegen-units = 1
-incremental = false
-opt-level = "z"
