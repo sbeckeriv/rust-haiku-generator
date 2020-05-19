@@ -205,10 +205,5 @@ fn main() {
     let two = to_sentence_case(&line(&chain, 7, Some(&one)));
     let three = to_sentence_case(&line(&chain, 5, Some(&two)));
 
-    println!(
-        "{}\n{}\n{}",
-        syllables_in_word(&one),
-        syllables_in_word(&two),
-        syllables_in_word(&three),
-    );
+    println!("{}\n{}\n{}", one, two, three);
 }
