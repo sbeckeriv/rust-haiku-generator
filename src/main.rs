@@ -81,7 +81,8 @@ fn base_chain(chain: &Chain<String>) -> Vec<String> {
         .map(|x| &**x)
         .map(|x| {
             x.iter()
-                .map(|z| z.clone().unwrap_or_else(|| String::from("")))
+                .filter(|z| z.is_some())
+                .map(|z| z.as_ref().unwrap())
                 .join(" ")
         })
         .collect::<Vec<_>>();
@@ -103,23 +104,24 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
     let mut keys: Vec<String> = vec![];
     let mut rng = thread_rng();
     let mut sum = 0;
-
+    let common_chain = base_chain(chain);
     let mut choices = if let Some(context) = context {
         let token = make_token(context, chain.order);
         if let Some(map) = chain.map.get(&token) {
             map.keys()
-                .map(|x| x.clone().unwrap())
+                .map(|x| x.as_ref().unwrap())
                 .filter(|x| syllables_in_word(&x) <= (count - sum))
                 .nth(0)
+                .map(|x| x.to_string())
         } else {
-            base_chain(chain)
+            common_chain
                 .iter()
                 .filter(|x| syllables_in_word(&x) <= (count - sum))
                 .nth(0)
                 .map(|x| x.to_string())
         }
     } else {
-        base_chain(chain)
+        common_chain
             .iter()
             .filter(|x| syllables_in_word(&x) <= (count - sum))
             .nth(0)
@@ -131,7 +133,7 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
             //reset
             sum = 0;
             keys = vec![];
-            choices = base_chain(chain)
+            common_chain
                 .iter()
                 .filter(|x| syllables_in_word(&x) <= (count - sum))
                 .nth(0)
@@ -181,7 +183,6 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
             // end of chain get some random start
             base_chain(chain)
                 .iter()
-                .cloned()
                 .filter(|x| syllables_in_word(&x) <= remaining)
                 .nth(0)
                 .map(|x| x.to_string())
