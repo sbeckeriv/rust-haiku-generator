@@ -252,7 +252,7 @@ impl Chain<String> {
         let mut ret = String::new();
         for s in &vec {
             ret.push_str(&s);
-            ret.push_str(" ");
+            ret.push(' ');
         }
         let len = ret.len();
         if len > 0 {

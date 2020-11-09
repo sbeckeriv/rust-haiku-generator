@@ -1,33 +1,34 @@
-extern crate inflector;
-extern crate rand;
-extern crate wordsworth;
-#[macro_use]
-extern crate lazy_static;
-extern crate itertools;
-extern crate petgraph;
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate lazy_static;
+extern crate cmudict_core;
+extern crate inflector;
+extern crate itertools;
+extern crate petgraph;
+extern crate rand;
+extern crate serde;
 extern crate serde_yaml;
 extern crate whatlang;
+extern crate wordsworth;
 use clap::{load_yaml, App};
+use cmudict_core::Rule;
 use inflector::cases::sentencecase::to_sentence_case;
-use std::borrow::ToOwned;
-use std::collections::HashMap;
-use std::path::Path;
-
 use itertools::Itertools;
-
 use rand::{thread_rng, Rng};
-
+use std::borrow::ToOwned;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fs;
-
-use whatlang::{Detector, Lang, Script};
-mod markov;
-use markov::Chain;
 use std::fs::File;
 use std::io::{self, BufRead};
-extern crate cmudict_core;
+use std::path::Path;
+use std::str::FromStr;
+use std::time::SystemTime;
+
+mod markov;
+use markov::Chain;
+
 lazy_static! {
     static ref DICT: HashMap<String, String> = {
         let filename = "/home/becker/.config/haiku/cmudict.clean";
@@ -46,31 +47,27 @@ lazy_static! {
     };
 }
 
-use std::time::SystemTime;
-
-use cmudict_core::Rule;
-use std::str::FromStr;
 fn syllables_in_word(word: &str) -> usize {
     word.trim()
         .split(' ')
         .map(|x| {
-            let mut count = 0;
             let now = SystemTime::now();
             if let Some(dict_word) = DICT.get(x) {
                 println!("lookup took {}", now.elapsed().unwrap().as_secs());
-                count = Rule::from_str(&dict_word)
+                Rule::from_str(&dict_word)
                     .unwrap()
                     .pronunciation()
                     .iter()
                     .filter(|x| x.is_syllable())
-                    .count() as u32;
+                    .count() as u32
             } else {
-                count = wordsworth::syllable_counter(x);
+                let count = wordsworth::syllable_counter(x);
                 if count == 0 {
-                    count = 1;
+                    1
+                } else {
+                    count
                 }
             }
-            count
         })
         .sum::<u32>() as usize
 }
@@ -82,8 +79,7 @@ fn base_chain(chain: &Chain<String>) -> Vec<String> {
         .keys()
         .map(|x| &**x)
         .map(|x| {
-            x.clone()
-                .iter()
+            x.iter()
                 .map(|z| z.clone().unwrap_or_else(|| String::from("")))
                 .join(" ")
         })
@@ -131,7 +127,7 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         let key_array = rng.choose(&choices).unwrap().clone().to_owned();
         let word = key_array
             .split_whitespace()
-            .nth(0)
+            .next()
             .unwrap_or_default()
             .to_string();
         sum += syllables_in_word(&word);
@@ -153,13 +149,14 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         //dbg!(syllables_in_word(&word), &word);
         keys.push(word.clone());
         //dbg!(&keys);
-        if count as i32 - sum as i32 == 0 {
-            break;
-        } else if (count as i32 - sum as i32) < 0 {
-            // could happen if first selection is larger then request because we dont filter them
-            ////dbg!(count as i32 - sum as i32, &keys, sum, count);
-            let bad_word = keys.pop().unwrap();
-            sum = sum.saturating_sub(bad_word.len());
+        let delta = count as i32 - sum as i32;
+        match delta.partial_cmp(&0).expect("I don't like NaNs") {
+            Ordering::Less => {}
+            Ordering::Greater => {
+                let bad_word = keys.pop().unwrap();
+                sum = sum.saturating_sub(bad_word.len());
+            }
+            Ordering::Equal => break,
         }
         //dbg!(count);
         let remaining = count - sum;
