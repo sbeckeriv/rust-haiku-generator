@@ -15,6 +15,8 @@ use clap::{load_yaml, App};
 use cmudict_core::Rule;
 use inflector::cases::sentencecase::to_sentence_case;
 use itertools::Itertools;
+use rand::prelude::*;
+use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use std::borrow::ToOwned;
 use std::cmp::Ordering;
@@ -39,7 +41,7 @@ lazy_static! {
             let mut split = s.splitn(2, "  ");
             if let Some(key) = split.next() {
                 if let Some(value) = split.next() {
-                    hash.insert(key.to_string(), value.to_string());
+                    hash.insert(key.to_lowercase().to_string(), value.to_string());
                 }
             }
         }
@@ -51,9 +53,7 @@ fn syllables_in_word(word: &str) -> usize {
     word.trim()
         .split(' ')
         .map(|x| {
-            let now = SystemTime::now();
             if let Some(dict_word) = DICT.get(x) {
-                println!("lookup took {}", now.elapsed().unwrap().as_secs());
                 Rule::from_str(&dict_word)
                     .unwrap()
                     .pronunciation()
@@ -74,7 +74,8 @@ fn syllables_in_word(word: &str) -> usize {
 
 //Load up the base keys
 fn base_chain(chain: &Chain<String>) -> Vec<String> {
-    chain
+    let mut rng = thread_rng();
+    let mut values = chain
         .map
         .keys()
         .map(|x| &**x)
@@ -83,7 +84,9 @@ fn base_chain(chain: &Chain<String>) -> Vec<String> {
                 .map(|z| z.clone().unwrap_or_else(|| String::from("")))
                 .join(" ")
         })
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+    values.shuffle(&mut rng);
+    values
 }
 
 // make the key token from a string
@@ -103,28 +106,39 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
 
     let mut choices = if let Some(context) = context {
         let token = make_token(context, chain.order);
-        dbg!(&token);
         if let Some(map) = chain.map.get(&token) {
-            dbg!(&map);
             map.keys()
                 .map(|x| x.clone().unwrap())
                 .filter(|x| syllables_in_word(&x) <= (count - sum))
-                .collect::<Vec<_>>()
+                .nth(0)
         } else {
             base_chain(chain)
+                .iter()
+                .filter(|x| syllables_in_word(&x) <= (count - sum))
+                .nth(0)
+                .map(|x| x.to_string())
         }
     } else {
         base_chain(chain)
+            .iter()
+            .filter(|x| syllables_in_word(&x) <= (count - sum))
+            .nth(0)
+            .map(|x| x.to_string())
     };
     loop {
-        if choices.is_empty() {
+        if choices.is_none() {
+            break
             //reset
-            choices = base_chain(chain);
             sum = 0;
             keys = vec![];
+            choices = base_chain(chain)
+                .iter()
+                .filter(|x| syllables_in_word(&x) <= (count - sum))
+                .nth(0)
+                .map(|x| x.to_string());
         }
 
-        let key_array = rng.choose(&choices).unwrap().clone().to_owned();
+        let key_array = choices.unwrap().clone().to_owned();
         let word = key_array
             .split_whitespace()
             .next()
@@ -146,40 +160,32 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         };
 
         let token = make_token(&token_word, chain.order);
-        //dbg!(syllables_in_word(&word), &word);
         keys.push(word.clone());
-        //dbg!(&keys);
         let delta = count as i32 - sum as i32;
         match delta.partial_cmp(&0).expect("I don't like NaNs") {
-            Ordering::Less => {}
-            Ordering::Greater => {
+            Ordering::Less => {
                 let bad_word = keys.pop().unwrap();
                 sum = sum.saturating_sub(bad_word.len());
             }
+            Ordering::Greater => {}
             Ordering::Equal => break,
         }
-        //dbg!(count);
         let remaining = count - sum;
-        //dbg!(remaining);
         choices = if let Some(map) = chain.map.get(&token) {
-            dbg!(token);
-            //dbg!(&keys);
             map.keys()
                 .map(|x| x.clone().unwrap())
                 .filter(|x| syllables_in_word(&x) <= remaining)
-                .collect::<Vec<_>>()
+                .nth(0)
+                .map(|x| x.to_string())
         } else {
-            dbg!("eoc");
             // end of chain get some random start
-            //dbg!(&keys);
             base_chain(chain)
                 .iter()
                 .cloned()
                 .filter(|x| syllables_in_word(&x) <= remaining)
-                .collect::<Vec<_>>()
+                .nth(0)
+                .map(|x| x.to_string())
         };
-
-        //dbg!(&keys);
     }
     keys.join(" ")
 }
