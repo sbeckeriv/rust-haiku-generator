@@ -9,6 +9,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_yaml;
+extern crate whatlang;
 use clap::{load_yaml, App};
 use inflector::cases::sentencecase::to_sentence_case;
 use std::borrow::ToOwned;
@@ -21,6 +22,7 @@ use rand::{thread_rng, Rng};
 
 use std::fs;
 
+use whatlang::{Detector, Lang, Script};
 mod markov;
 use markov::Chain;
 use std::fs::File;
@@ -105,7 +107,9 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
 
     let mut choices = if let Some(context) = context {
         let token = make_token(context, chain.order);
+        dbg!(&token);
         if let Some(map) = chain.map.get(&token) {
+            dbg!(&map);
             map.keys()
                 .map(|x| x.clone().unwrap())
                 .filter(|x| syllables_in_word(&x) <= (count - sum))
@@ -125,14 +129,17 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         }
 
         let key_array = rng.choose(&choices).unwrap().clone().to_owned();
-        let word = key_array.clone();
-
+        let word = key_array
+            .split_whitespace()
+            .nth(0)
+            .unwrap_or_default()
+            .to_string();
         sum += syllables_in_word(&word);
         let token_word = if word.split(' ').count() < chain.order {
             format!(
                 "{} {}",
                 keys.last()
-                    .unwrap()
+                    .unwrap_or(&"".to_string())
                     .rsplitn(1, ' ')
                     .collect::<Vec<_>>()
                     .join(""),
@@ -158,12 +165,14 @@ fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> String
         let remaining = count - sum;
         //dbg!(remaining);
         choices = if let Some(map) = chain.map.get(&token) {
+            dbg!(token);
             //dbg!(&keys);
             map.keys()
                 .map(|x| x.clone().unwrap())
                 .filter(|x| syllables_in_word(&x) <= remaining)
                 .collect::<Vec<_>>()
         } else {
+            dbg!("eoc");
             // end of chain get some random start
             //dbg!(&keys);
             base_chain(chain)
