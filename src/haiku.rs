@@ -11,7 +11,6 @@ fn syllables_in_word(word: &str) -> usize {
     word.trim()
         .split(' ')
         .map(|x| {
-            dbg!(&x);
             if let Some(dict_word) = super::DICT.get(x) {
                 let z = Rule::from_str(&dict_word)
                     .unwrap()
@@ -19,7 +18,6 @@ fn syllables_in_word(word: &str) -> usize {
                     .iter()
                     .filter(|x| x.is_syllable())
                     .count() as u32;
-                dbg!(z);
                 if z == 0 {
                     1
                 } else {
@@ -30,7 +28,6 @@ fn syllables_in_word(word: &str) -> usize {
                 if count == 0 {
                     50000
                 } else {
-                    dbg!(count);
                     count
                 }
             }
@@ -81,13 +78,12 @@ pub fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> St
     //start
     let common_chain = base_chain(chain);
     let mut choice = word_from_list(&common_chain, count);
+    let mut rollback = 0;
     loop {
         if choice.is_none() {
-            dbg!("resetting");
             //reset
             sum = 0;
             keys = vec![];
-
             choice = base_chain(chain).iter().next().map(|x| x.to_string());
             continue;
         }
@@ -103,11 +99,8 @@ pub fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> St
                 .to_string()
         };
 
-        dbg!(&word);
         sum += syllables_in_word(&word);
-        dbg!(sum);
         keys.push(word.clone());
-        dbg!(chain.order);
         let token_word = if keys.len() >= chain.order {
             let mut rev = keys.iter().rev();
             let last = rev.next().unwrap();
@@ -117,28 +110,26 @@ pub fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> St
         } else {
             word.clone()
         };
-        dbg!(&token_word);
 
-        dbg!(&keys);
         let token = make_token(&token_word, chain.order);
-        dbg!(&token);
-        //let delta = count as i32 - sum as i32;
         let words = keys.clone().join(" ");
-        dbg!(&words, sum);
         let delta = count as i32 - syllables_in_word(&words) as i32;
-        dbg!(delta);
         match delta.partial_cmp(&0).expect("I don't like NaNs") {
             Ordering::Less => {
-                dbg!("bad", &keys);
-                let bad_word = keys.pop().unwrap();
-                sum = sum.saturating_sub(bad_word.len());
+                rollback += 1;
+                if rollback > 2 {
+                    sum = 0;
+                    keys = vec![];
+                } else {
+                    let bad_word = keys.pop().unwrap();
+                    sum = sum.saturating_sub(bad_word.len());
+                }
             }
             Ordering::Greater => {}
             Ordering::Equal => break,
         }
         let remaining = count - sum;
         choice = if let Some(map) = chain.map.get(&token) {
-            dbg!(map.keys());
             map.keys()
                 .map(|x| x.clone().unwrap())
                 .filter(|x| syllables_in_word(&x) <= remaining)
@@ -150,10 +141,8 @@ pub fn line(chain: &Chain<String>, count: usize, context: Option<&String>) -> St
                 .filter(|x| x.get(0) == Some(&Some(word.clone())))
                 .nth(0)
             {
-                dbg!("starter", &tokens);
                 tokens.get(1).unwrap().clone()
             } else {
-                dbg!("reset", word);
                 // end of chain get some random start
                 base_chain(chain)
                     .iter()
